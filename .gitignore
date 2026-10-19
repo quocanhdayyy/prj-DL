@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+data/processed/
+runs/
+best_model.keras
+training_history.png
+.DS_Store
