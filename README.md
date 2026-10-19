@@ -75,3 +75,4 @@ Trả nhãn nguồn 1–86 và xác suất softmax. Ví dụ SMILES trên chỉ 
 `DataPreprocessing.ipynb` là notebook cũ phục vụ tham khảo. Pipeline tái lập chính thức dùng các script ở trên, không cần chạy notebook hoặc gọi PubChem.
 
 API tham khảo: [TensorFlow seed](https://www.tensorflow.org/api_docs/python/tf/keras/utils/set_random_seed), [RDKit fingerprints](https://www.rdkit.org/docs/GettingStartedInPython.html).
+# prj-DL
