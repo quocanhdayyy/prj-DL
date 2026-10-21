@@ -9,9 +9,9 @@
 
 ## Plan, installation, and runtime
 
-- A plan describes proposed work; it is not evidence that work ran. `reports/MLP_IMPLEMENTATION_PLAN.md` is currently installation-only: use the existing MLP, prepare/check the environment only when asked, and do not run preprocessing, tests, model construction, training, evaluation, or prediction under that scope.
+- A plan describes proposed work; it is not evidence that work ran. `reports/MLP_IMPLEMENTATION_PLAN.md` now separates code/docs completion from later Colab runtime. Reuse the existing MLP; do not install heavy dependencies or train locally. Verify runtime and data on Colab before training; do not execute the future Colab steps during code preparation.
 - Installation checks such as `pip check` and Python source compilation do not establish runtime behavior. Model tests, smoke runs, training, and inference are separate runtime work and require that scope to be requested.
-- `VALIDATION.md` records historical results from macOS on 2026-10-19. Cite it as recorded history, not as a fresh check on the current checkout or environment.
+- `VALIDATION.md` records dated evidence. Its macOS results from 2026-10-19 are historical, not fresh checks of the current checkout or environment; the local checks on 2026-10-21 cover syntax and mocked logic only.
 - Match verification to the request. For documentation-only changes, check links, scope, and `git diff --check`; do not run model tests. For code changes, run only appropriate checks authorized by the task.
 
 ## Progress and continuity

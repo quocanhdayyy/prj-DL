@@ -5,17 +5,9 @@ Mô hình chính: 4 khối Conv1D → 2 BiLSTM → Dense → Softmax. Có MLP đ
 
 ## Cài đặt
 
-Python 3.9–3.12, khuyến nghị Python 3.11. Tại thư mục project:
+Quy trình hiện tại: **hoàn thiện code ở local, kiểm thử runtime và train trên Colab sau đó**. Không cần cài TensorFlow hoặc tạo `.venv` local cho bước chỉnh code. Xem [kế hoạch](reports/MLP_IMPLEMENTATION_PLAN.md) và [kiến thức triển khai/hướng dẫn Colab](docs/MLP_GUIDE.md).
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-```
-
-`requirements-lock-macos-py39.txt` ghi lại chính xác môi trường đã kiểm tra trên máy này; dùng `requirements.txt` khi cài trên nền tảng khác.
-
-Windows dùng `.venv\Scripts\activate`. TensorFlow được giới hạn 2.16.x để thống nhất môi trường; GPU NVIDIA nên chạy Linux/Colab hoặc WSL2.
+Các lệnh pipeline dưới đây dành cho Colab đã chuẩn bị, không tự chạy trong giai đoạn hoàn thiện code. Dependencies hiện dùng Python 3.9–3.12, TensorFlow 2.16.x, Keras 3.10.x. `requirements-dev.txt` bao gồm dependencies chính và pytest. Lock macOS chỉ ghi môi trường lịch sử ngày 19/10/2026, không dùng cho Colab.
 
 ## 1. Chuẩn bị dữ liệu
 
@@ -36,20 +28,20 @@ Chia stratified train/validation/test = **64%/16%/20%**, seed 42, sau khi làm s
 
 ```bash
 python -m pytest -q
-python model.py --smoke --architecture mlp --output runs/smoke-mlp
-python model.py --smoke --output runs/smoke-cnn
+python model.py --smoke --architecture mlp --skip-test --output runs/smoke-mlp
+python model.py --smoke --skip-test --output runs/smoke-cnn
 ```
 
-Smoke dùng 1000/300/300 mẫu được lấy mẫu có seed, giữ ít nhất một mẫu mỗi lớp, và 1 epoch. **Các metrics smoke chỉ xác nhận pipeline chạy; không dùng báo cáo chất lượng mô hình.** Mỗi run phải dùng thư mục output mới để tránh ghi đè checkpoint.
+Smoke với `--skip-test` dùng 1000 mẫu train/300 validation, được lấy mẫu có seed, giữ ít nhất một mẫu mỗi lớp, và 1 epoch. Nếu chấm test cho run smoke, chỉ dùng tối đa 300 mẫu test. **Các metrics smoke chỉ xác nhận pipeline chạy; không dùng báo cáo chất lượng mô hình.** Mỗi run phải dùng thư mục output mới để tránh ghi đè checkpoint.
 
 ## 3. Train đầy đủ
 
 ```bash
-python model.py --output runs/cnn-full --epochs 50 --batch-size 32
-python model.py --architecture mlp --output runs/mlp-full --epochs 50
+python model.py --skip-test --output runs/cnn-full --epochs 50 --batch-size 32
+python model.py --architecture mlp --skip-test --output runs/mlp-full --epochs 50
 ```
 
-CNN–BiLSTM trên 4096 bit có thể chậm trên CPU. Khuyến nghị Colab GPU cho full training. Fingerprint là vector bit băm, không có thứ tự chuỗi hóa học tự nhiên: CNN–BiLSTM là giả thuyết thực nghiệm cần so sánh với MLP, chưa thể khẳng định tốt hơn.
+Chỉ train sau khi code hoàn thiện và tests, audit dữ liệu, smoke đạt trên Colab GPU. Fingerprint là vector bit băm, không có thứ tự chuỗi hóa học tự nhiên: CNN–BiLSTM là giả thuyết thực nghiệm cần so sánh với MLP, chưa thể khẳng định tốt hơn.
 
 Có class weights tính chỉ từ train, gradient clipping, EarlyStopping, giảm learning rate theo validation loss và checkpoint tốt nhất. Dùng sparse categorical cross entropy, không cần one-hot. Seed cố định; thêm `--deterministic` nếu cần thực thi deterministic, có thể chậm hơn. Không tuning hyperparameter theo test.
 
@@ -58,11 +50,17 @@ Mỗi run xuất:
 - `best_model.keras`: checkpoint theo validation loss.
 - `config.json`, `data_metadata.json`: cấu hình và nguồn dữ liệu.
 - `training.csv`, `history.json`, `training_history.png`: lịch sử train.
-- `metrics.json`: loss, accuracy, micro/macro/weighted F1 và precision/recall/F1 từng lớp.
-- `confusion_matrix.npy`: ma trận 86×86; chỉ số hàng/cột 0 ứng với nhãn nguồn 1.
-- `test_predictions.npz`: nhãn đúng và dự đoán zero-based.
+- `validation_metrics.json`: loss, accuracy, micro/macro/weighted F1 và báo cáo từng lớp trên validation từ checkpoint tốt nhất.
 
-Ưu tiên đọc Macro F1 vì mất cân bằng lớp; micro F1 bằng accuracy trong bài toán single-label này. Chỉ đánh giá test sau khi chọn checkpoint bằng validation. Khi so sánh kiến trúc, nên chọn bằng validation trước và chỉ báo cáo test cuối cùng; không liên tục chọn model theo test.
+Ưu tiên đọc Macro F1 vì mất cân bằng lớp; micro F1 bằng accuracy trong bài toán single-label này. Dùng `--skip-test` để không đọc/chấm test trong smoke và các run chọn cấu hình. Lệnh train cũ không có cờ này vẫn tự đánh giá test để giữ tương thích.
+
+Sau khi chọn run bằng validation Macro F1, chấm test riêng, ví dụ nếu chọn MLP:
+
+```bash
+python model.py --evaluate-only --output runs/mlp-full
+```
+
+Lệnh dùng config/checkpoint đã lưu, không train lại; xuất `metrics.json`, `confusion_matrix.npy` (86×86; chỉ số 0 ứng với nhãn nguồn 1) và `test_predictions.npz` (nhãn zero-based). Từ chối ghi đè artifacts test có sẵn. Không tuning tiếp theo test. `--evaluate-only` trên run smoke vẫn chỉ chấm mẫu nhỏ, không dùng báo cáo chất lượng.
 
 ## 4. Dự đoán
 
