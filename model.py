@@ -163,6 +163,55 @@ def dataset(X, y, architecture, batch_size, training=False, seed=42):
     return ds.batch(batch_size).map(lambda x, label: (tf.cast(x, tf.float32), label)).with_options(options).prefetch(1)
 
 
+def evaluate_split(model, data_dir, split, architecture, batch_size, seed, smoke):
+    limit = 300 if smoke else None
+    X, y = load_data(data_dir / f'{split}_data.npz', limit, seed)
+    ds = dataset(X, y, architecture, batch_size)
+    loss, accuracy = model.evaluate(ds, verbose=0)
+    predicted = model.predict(ds, verbose=0).argmax(axis=1)
+    report = classification_report(y, predicted, labels=list(range(NUM_CLASSES)),
+        target_names=[str(i) for i in range(1, NUM_CLASSES+1)], output_dict=True, zero_division=0)
+    results = {'loss': float(loss), 'accuracy': float(accuracy),
+               'macro_f1': report['macro avg']['f1-score'], 'weighted_f1': report['weighted avg']['f1-score'],
+               'micro_f1': float(accuracy_score(y, predicted)), 'smoke_only': smoke,
+               'classification_report': report}
+    return results, y, predicted
+
+
+def evaluate_only(args):
+    artifacts = [args.output / name for name in ('metrics.json', 'confusion_matrix.npy', 'test_predictions.npz')]
+    existing = [path.name for path in artifacts if path.exists()]
+    if existing:
+        raise FileExistsError(f'{", ".join(existing)} already exist; refusing to evaluate test data again')
+    config = json.loads((args.output / 'config.json').read_text())
+    data_dir = Path(config['data_dir'])
+    architecture, seed, batch_size = config['architecture'], config['seed'], config['batch_size']
+    smoke = config.get('smoke_only', config.get('smoke', False))
+    model = tf.keras.models.load_model(args.output / 'best_model.keras')
+    results, y, predicted = evaluate_split(model, data_dir, 'test', architecture, batch_size, seed, smoke)
+    save_test_results(args.output, results, y, predicted)
+
+
+def save_training_evaluations(args, model):
+    validation, _, _ = evaluate_split(model, args.data_dir, 'valid', args.architecture,
+                                      args.batch_size, args.seed, args.smoke)
+    (args.output / 'validation_metrics.json').write_text(json.dumps(validation, indent=2))
+    if args.skip_test:
+        print(json.dumps({k:v for k,v in validation.items() if k != 'classification_report'}, indent=2))
+        return
+    results, y, predicted = evaluate_split(model, args.data_dir, 'test', args.architecture,
+                                            args.batch_size, args.seed, args.smoke)
+    save_test_results(args.output, results, y, predicted)
+
+
+def save_test_results(output, results, y, predicted):
+    results['test_loss'] = results.pop('loss')
+    (output / 'metrics.json').write_text(json.dumps(results, indent=2))
+    np.save(output / 'confusion_matrix.npy', confusion_matrix(y, predicted, labels=range(NUM_CLASSES)))
+    np.savez_compressed(output / 'test_predictions.npz', y_true=y, y_pred=predicted)
+    print(json.dumps({k:v for k,v in results.items() if k != 'classification_report'}, indent=2))
+
+
 def train(args):
     if args.learning_rate <= 0:
         raise ValueError('learning-rate must be positive')
@@ -210,20 +259,7 @@ def train(args):
     plt.close(fig)
     del X, y, V, vy
     model = tf.keras.models.load_model(checkpoint)
-    X, y = load_data(args.data_dir / 'test_data.npz', 300 if args.smoke else None, args.seed)
-    test = dataset(X, y, args.architecture, args.batch_size)
-    loss, accuracy = model.evaluate(test, verbose=0)
-    predicted = model.predict(test, verbose=0).argmax(axis=1)
-    report = classification_report(y, predicted, labels=list(range(NUM_CLASSES)),
-        target_names=[str(i) for i in range(1, NUM_CLASSES+1)], output_dict=True, zero_division=0)
-    results = {'test_loss': float(loss), 'accuracy': float(accuracy),
-               'macro_f1': report['macro avg']['f1-score'], 'weighted_f1': report['weighted avg']['f1-score'],
-               'micro_f1': float(accuracy_score(y, predicted)), 'smoke_only': args.smoke,
-               'classification_report': report}
-    (args.output / 'metrics.json').write_text(json.dumps(results, indent=2))
-    np.save(args.output / 'confusion_matrix.npy', confusion_matrix(y, predicted, labels=range(NUM_CLASSES)))
-    np.savez_compressed(args.output / 'test_predictions.npz', y_true=y, y_pred=predicted)
-    print(json.dumps({k:v for k,v in results.items() if k != 'classification_report'}, indent=2))
+    save_training_evaluations(args, model)
 
 
 if __name__ == '__main__':
@@ -237,4 +273,10 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--smoke', action='store_true')
     parser.add_argument('--deterministic', action='store_true')
-    train(parser.parse_args())
+    parser.add_argument('--skip-test', action='store_true', help='train and save validation metrics without loading test data')
+    parser.add_argument('--evaluate-only', action='store_true', help='evaluate an existing run once on test data; smoke runs use a sample')
+    args = parser.parse_args()
+    if args.evaluate_only:
+        evaluate_only(args)
+    else:
+        train(args)
