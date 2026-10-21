@@ -14,6 +14,12 @@
 - `VALIDATION.md` records historical results from macOS on 2026-10-19. Cite it as recorded history, not as a fresh check on the current checkout or environment.
 - Match verification to the request. For documentation-only changes, check links, scope, and `git diff --check`; do not run model tests. For code changes, run only appropriate checks authorized by the task.
 
+## Progress and continuity
+
+- When a feature or behavior change is complete, update the relevant README, plan, or report when its usage, scope, or documented decisions change, and add a concise entry to `progress.md` so reports and later sessions have continuity. Do not copy a full plan/report into the progress log or repeat every document for a typo-only change.
+- Record the concrete change, checks actually run and their evidence, and remaining work. Never present planned or historical checks as fresh results.
+- When a material status change affects next steps, blockers, or available artifacts, sync `docs/HANDOFF.md`; keep it a short current snapshot, not a second progress log.
+
 ## Git
 
 - Work on the task's existing branch; do not create a branch or merge main unless requested.
